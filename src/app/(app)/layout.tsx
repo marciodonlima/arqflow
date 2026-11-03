@@ -1,13 +1,15 @@
 import Link from 'next/link'
+import { AtualizarBanco } from '@/components/AtualizarBanco'
 import { BotaoCapturar, CapturaProvider } from '@/components/Captura'
 import { CronometroGlobal } from '@/components/Cronometro'
 import { Icone } from '@/components/Icone'
 import { BarraInferior, LinkProjeto, NavLateral } from '@/components/Navegacao'
-import { capturasAbertas, carregarCarteira, sessao, timerAtivo } from '@/lib/dados'
+import { bancoAtualizado, capturasAbertas, carregarCarteira, sessao, timerAtivo } from '@/lib/dados'
 import { iniciais } from '@/lib/formato'
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
   const { supabase, perfil, user, hoje } = await sessao()
+  if (!(await bancoAtualizado(supabase))) return <AtualizarBanco />
   const [{ projetos, saudes }, capturas, timer] = await Promise.all([carregarCarteira(supabase, perfil, hoje), capturasAbertas(supabase), timerAtivo(supabase)])
   const ativos = projetos.filter((p) => p.status === 'andamento' || p.status === 'proposta')
   const lista = [...ativos].sort((a, b) => (a.status === b.status ? a.nome.localeCompare(b.nome) : a.status === 'andamento' ? -1 : 1))

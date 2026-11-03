@@ -165,3 +165,10 @@ export const carregarProjeto = cache(async function carregarProjeto(supabase: Cl
   const [tarefas, parcelas] = await Promise.all([tarefasDe(supabase, [id]), parcelasDe(supabase, [id])])
   return { projeto, tarefas, parcelas, saude: calcularSaude(projeto, tarefas, perfil, hoje, parcelas) }
 })
+
+// O banco já recebeu o script da versão atual? (tabelas novas existem)
+export const bancoAtualizado = cache(async function bancoAtualizado(supabase: Cliente) {
+  const { error } = await supabase.from('apontamentos').select('id').limit(1)
+  if (!error) return true
+  return !(error.code === '42P01' || error.code === 'PGRST205' || /apontamentos/.test(error.message ?? ''))
+})
