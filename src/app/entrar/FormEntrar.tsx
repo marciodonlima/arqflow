@@ -11,6 +11,17 @@ export function FormEntrar() {
   const [estadoC, acaoC, carregandoC] = useActionState<EstadoForm, FormData>(criarConta, undefined)
   const [estadoR, acaoR, carregandoR] = useActionState<EstadoForm, FormData>(recuperarSenha, undefined)
 
+  if (modo === 'criar' && estadoC?.ok)
+    return (
+      <div className="pilha confirmacao" role="status">
+        <span className="confirmacao-icone" aria-hidden="true">✓</span>
+        <h1 className="titulo-secao">Confira o seu e-mail</h1>
+        <p className="apoio">{estadoC.ok}</p>
+        <p className="meta">O link abre o ARQFLOW já com a conta ativa. Se não chegar em alguns minutos, olhe a caixa de spam.</p>
+        <button type="button" className="btn btn-sec" onClick={() => setModo('entrar')}>Já confirmei, quero entrar</button>
+      </div>
+    )
+
   if (modo === 'criar')
     return (
       <form action={acaoC} className="pilha">
@@ -29,7 +40,6 @@ export function FormEntrar() {
           <small>Pelo menos 6 caracteres.</small>
         </label>
         {estadoC?.erro && <p className="erro" role="alert">{estadoC.erro}</p>}
-        {estadoC?.ok && <p className="aviso" role="status">{estadoC.ok}</p>}
         <button className="btn btn-largo" disabled={carregandoC}>{carregandoC ? 'Criando…' : 'Criar conta'}</button>
         <p className="apoio">
           Já tem conta?{' '}

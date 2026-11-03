@@ -1,56 +1,64 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { capturasAbertas, diaDe, projetosDe, sessao, tarefasDe } from '@/lib/dados'
-import { hojeEm, somarDiasUteis } from '@/lib/datas'
+import { apontamentosDesde, capturasAbertas, carregarCarteira, diaDe, sessao } from '@/lib/dados'
+import { diaUtilSeguinte, hojeEm } from '@/lib/datas'
 import { montarDia } from '@/lib/prioridade'
-import { FormCheckout } from './FormCheckout'
+import { Checkout, type ItemCheckout } from './Checkout'
 
-export const metadata: Metadata = { title: 'Check-out' }
+export const metadata: Metadata = { title: 'Fechar o dia' }
 
-export default async function Checkout() {
-  const { supabase, perfil } = await sessao()
-  const hoje = hojeEm(perfil.fuso)
-  const amanha = somarDiasUteis(hoje, 1)
-  const [projetos, dia, capturas] = await Promise.all([projetosDe(supabase, ['andamento', 'proposta']), diaDe(supabase, hoje), capturasAbertas(supabase)])
-  const tarefas = await tarefasDe(supabase, projetos.map((p) => p.id))
-  const nome = (id: string) => projetos.find((p) => p.id === id)?.nome ?? ''
-  const concluidas = tarefas.filter((t) => t.status === 'feita' && t.concluida_em && hojeEm(perfil.fuso, new Date(t.concluida_em)) === hoje)
-  const { lista } = montarDia(tarefas, projetos, amanha, null, perfil.horas_dia)
-  const opcoes = lista.slice(0, 6).map((x) => ({ id: x.tarefa.id, titulo: x.tarefa.titulo, projeto: x.projeto.nome }))
+export default async function PaginaCheckout() {
+  const { supabase, perfil, hoje } = await sessao()
+  const amanha = diaUtilSeguinte(hoje)
+  const [{ projetos, tarefas, saudes }, dia, capturas, apontamentos] = await Promise.all([
+    carregarCarteira(supabase, perfil, hoje),
+    diaDe(supabase, hoje),
+    capturasAbertas(supabase),
+    apontamentosDesde(supabase, new Date(Date.now() - 36 * 3600000).toISOString()),
+  ])
+  const ativos = projetos.filter((p) => p.status === 'andamento' || p.status === 'proposta')
+  const nome = (id: string) => projetos.find((p) => p.id === id)
+  const horasHojePorTarefa = new Map<string, number>()
+  for (const a of apontamentos) {
+    if (hojeEm(perfil.fuso, new Date(a.inicio)) !== hoje) continue
+    const h = a.horas ?? (a.fim ? 0 : (Date.now() - new Date(a.inicio).getTime()) / 3600000)
+    horasHojePorTarefa.set(a.tarefa_id, (horasHojePorTarefa.get(a.tarefa_id) ?? 0) + h)
+  }
+
+  // O que fez parte do dia: o plano de hoje, o que começou, o que vencia hoje e o que foi concluído
+  const { lista } = montarDia(tarefas, ativos, hoje, dia?.modo ?? null, perfil.horas_dia, saudes)
+  const ids = new Set<string>(lista.map((x) => x.tarefa.id))
+  for (const t of tarefas) {
+    const concluidaHoje = t.status === 'feita' && t.concluida_em && hojeEm(perfil.fuso, new Date(t.concluida_em)) === hoje
+    if (concluidaHoje || t.status === 'fazendo' || (t.status !== 'feita' && t.data_prevista && t.data_prevista <= hoje) || horasHojePorTarefa.has(t.id)) ids.add(t.id)
+  }
+  const itens: ItemCheckout[] = [...ids]
+    .map((id) => tarefas.find((t) => t.id === id)!)
+    .filter((t) => t && nome(t.projeto_id))
+    .map((t) => ({
+      id: t.id,
+      titulo: t.titulo,
+      projeto: nome(t.projeto_id)!.nome,
+      cor: nome(t.projeto_id)!.cor,
+      feita: t.status === 'feita',
+      horasHoje: horasHojePorTarefa.get(t.id) ?? 0,
+      horasReais: t.horas_reais,
+      horasEstimadas: t.horas_estimadas,
+      atrasada: !!t.data_prevista && t.data_prevista < hoje && t.status !== 'feita',
+    }))
+    .sort((a, b) => Number(b.feita) - Number(a.feita))
+
+  const { lista: listaAmanha } = montarDia(tarefas, ativos, amanha, null, perfil.horas_dia, saudes)
+  const opcoes = listaAmanha.slice(0, 8).map((x) => ({ id: x.tarefa.id, titulo: x.tarefa.titulo, projeto: x.projeto.nome, cor: x.projeto.cor }))
 
   return (
-    <div style={{ maxWidth: 680 }}>
-      <header className="cabecalho">
-        <div>
-          <h1 className="titulo-pagina">Check-out</h1>
-          <p className="apoio">Um minuto para fechar os loops do dia. O que fica anotado aqui não precisa ficar na cabeça.</p>
-        </div>
-      </header>
-      <div className="pilha-g">
-        <section className="pilha" style={{ gap: 'var(--space-3)' }}>
-          <span className="rotulo">1 · O que você concluiu hoje</span>
-          {concluidas.length === 0 ? (
-            <p className="apoio">Nenhuma tarefa marcada como concluída hoje. Tudo bem: dias de reunião, obra e imprevisto também são trabalho.</p>
-          ) : (
-            <ul className="lista-simples">
-              {concluidas.map((t) => (
-                <li key={t.id}>
-                  <span>{t.titulo}</span>
-                  <span className="meta">{nome(t.projeto_id)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {capturas.length > 0 && (
-            <p className="aviso">
-              <span>
-                {capturas.length} {capturas.length === 1 ? 'item espera' : 'itens esperam'} na caixa de captura. <Link href="/captura" className="btn-texto">Revisar antes de fechar</Link>
-              </span>
-            </p>
-          )}
-        </section>
-        <FormCheckout opcoes={opcoes} fechado={!!dia?.checkout_em} abertoAnterior={dia?.aberto ?? ''} escolhida={dia?.amanha_tarefa ?? null} />
-      </div>
-    </div>
+    <Checkout
+      itens={itens}
+      capturas={capturas.map((c) => ({ id: c.id, texto: c.texto, origem: c.origem, projetoId: c.projeto_id }))}
+      projetos={ativos.map((p) => ({ id: p.id, nome: p.nome }))}
+      opcoesAmanha={opcoes}
+      fechado={!!dia?.checkout_em}
+      abertoAnterior={dia?.aberto ?? ''}
+      escolhida={dia?.amanha_tarefa ?? null}
+    />
   )
 }

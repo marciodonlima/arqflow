@@ -9,7 +9,8 @@ import { ETAPAS_PLANEJAMENTO, MODELO_POR_CHAVE } from '@/lib/biblioteca'
 import type { Tarefa } from '@/lib/tipos'
 
 export function Planejamento({ projetoId, essenciais, partido }: { projetoId: string; essenciais: Tarefa[]; partido: string }) {
-  const [aberta, setAberta] = useState<Tarefa | null>(null)
+  const [abertaId, setAbertaId] = useState<string | null>(null)
+  const aberta = essenciais.find((t) => t.id === abertaId) ?? null
   const [pendente, iniciar] = useTransition()
   const [salvo, setSalvo] = useState(false)
   const feitas = essenciais.filter((t) => t.status === 'feita').length
@@ -42,7 +43,7 @@ export function Planejamento({ projetoId, essenciais, partido }: { projetoId: st
             <div key={e.chave} className="pilha" style={{ gap: 0 }}>
               <span className="meta" style={{ padding: '8px 0 2px' }}>{e.nome}</span>
               {lista.map((t) => (
-                <Etapa key={t.id} tarefa={t} aoAbrir={() => setAberta(t)} />
+                <Etapa key={t.id} tarefa={t} aoAbrir={() => setAbertaId(t.id)} />
               ))}
             </div>
           )
@@ -67,7 +68,7 @@ export function Planejamento({ projetoId, essenciais, partido }: { projetoId: st
           {salvo && <span className="meta">Salvo.</span>}
         </div>
       </form>
-      <PainelTarefa tarefa={aberta} projetoId={projetoId} aoFechar={() => setAberta(null)} />
+      <PainelTarefa tarefa={aberta} projetoId={projetoId} aoFechar={() => setAbertaId(null)} />
     </div>
   )
 }

@@ -3,15 +3,18 @@
 import Link from 'next/link'
 import { startTransition, useActionState, useMemo, useState } from 'react'
 import { criarProjeto, type EstadoProjeto } from '@/acoes/projetos'
+import { PrazoCampos } from '@/components/PrazoCampos'
+import { CORES_PROJETO } from '@/lib/cores'
+import { entregaPorPrazo } from '@/lib/datas'
 import { Icone } from '@/components/Icone'
 import { ESCOPOS, FASES, GRUPOS_AMBIENTES, TIPOLOGIAS, escoposPadrao, ehResidencial } from '@/lib/biblioteca'
 import { horasTotais, reais } from '@/lib/formato'
 import { gerarTarefas, montarContexto, resumirPorFase, valorSugerido } from '@/lib/motor'
-import type { Escopo, Tipologia } from '@/lib/tipos'
+import type { Escopo, PrazoTipo, Tipologia } from '@/lib/tipos'
 
 const PASSOS = ['Dados', 'Escopo', 'Ambientes', 'Revisão']
 
-export function NovoProjeto({ custoHora, margem, hoje }: { custoHora: number; margem: number; hoje: string }) {
+export function NovoProjeto({ custoHora, margem, hoje, corSugerida }: { custoHora: number; margem: number; hoje: string; corSugerida: string }) {
   const [estado, acao, enviando] = useActionState<EstadoProjeto, FormData>(criarProjeto, undefined)
   const [passo, setPasso] = useState(0)
   const [nome, setNome] = useState('')
@@ -22,6 +25,11 @@ export function NovoProjeto({ custoHora, margem, hoje }: { custoHora: number; ma
   const [qtd, setQtd] = useState<Record<string, number>>({})
   const [extras, setExtras] = useState<{ chave: string; nome: string }[]>([])
   const [novoAmbiente, setNovoAmbiente] = useState('')
+  const [cor, setCor] = useState(corSugerida)
+  const [inicio, setInicio] = useState(hoje)
+  const [dias, setDias] = useState('')
+  const [tipoPrazo, setTipoPrazo] = useState<PrazoTipo>('corridos')
+  const entregaPrevista = Number(dias) > 0 ? entregaPorPrazo(situacao === 'contratado' ? inicio : hoje, Math.round(Number(dias)), tipoPrazo) : null
 
   const grupos = GRUPOS_AMBIENTES[ehResidencial(tipologia) ? 'res' : 'com']
   const nomes = useMemo(() => {
@@ -129,26 +137,23 @@ export function NovoProjeto({ custoHora, margem, hoje }: { custoHora: number; ma
           </div>
         </fieldset>
         {situacao === 'proposta' ? (
-          <label className="campo" style={{ maxWidth: 340 }}>
-            <span>Prazo desejado pelo cliente (opcional)</span>
-            <input name="data_entrega" type="date" min={hoje} />
-          </label>
+          <div style={{ maxWidth: 460 }}>
+            <PrazoCampos dias={dias} setDias={setDias} tipo={tipoPrazo} setTipo={setTipoPrazo} entrega={entregaPrevista} rotulo="Prazo de entrega do projeto (opcional)" />
+          </div>
         ) : (
           <>
-            <div className="grade-3">
+            <div className="grade-2">
               <label className="campo">
-                <span>Início</span>
-                <input name="data_inicio" type="date" defaultValue={hoje} />
-              </label>
-              <label className="campo">
-                <span>Entrega combinada</span>
-                <input name="data_entrega" type="date" />
-                <small>Sem data, o ARQFLOW sugere uma.</small>
+                <span>Início do contrato</span>
+                <input name="data_inicio" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
               </label>
               <label className="campo">
                 <span>Valor do contrato (R$)</span>
                 <input name="valor_contrato" inputMode="decimal" placeholder="Opcional" />
               </label>
+            </div>
+            <div style={{ maxWidth: 460 }}>
+              <PrazoCampos dias={dias} setDias={setDias} tipo={tipoPrazo} setTipo={setTipoPrazo} entrega={entregaPrevista} rotulo="Prazo de entrega" />
             </div>
             <label className="campo" style={{ maxWidth: 340 }}>
               <span>Em que fase o projeto está?</span>
@@ -161,6 +166,24 @@ export function NovoProjeto({ custoHora, margem, hoje }: { custoHora: number; ma
             </label>
           </>
         )}
+        <fieldset className="campo">
+          <legend>Cor do projeto</legend>
+          <div className="cores" style={{ marginTop: 6 }}>
+            {CORES_PROJETO.map((c) => (
+              <button
+                key={c.chave}
+                type="button"
+                className="cor-amostra"
+                style={{ '--pc': c.claro, '--pe': c.escuro } as React.CSSProperties}
+                aria-pressed={cor === c.chave}
+                aria-label={c.nome}
+                title={c.nome}
+                onClick={() => setCor(c.chave)}
+              />
+            ))}
+          </div>
+          <input type="hidden" name="cor" value={cor} />
+        </fieldset>
         <label className="campo">
           <span>Observações iniciais</span>
           <textarea name="notas" placeholder="O que você já sabe sobre o cliente e o projeto." />

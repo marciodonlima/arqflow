@@ -21,7 +21,7 @@ export default async function Briefing({ params }: { params: Promise<{ id: strin
       </div>
       <FormBriefing
         projetoId={id}
-        perguntas={BRIEFING[ehResidencial(projeto.tipologia) ? 'res' : 'com']}
+        perguntas={[...BRIEFING[ehResidencial(projeto.tipologia) ? 'res' : 'com'], { chave: 'adicionais', pergunta: 'Informações adicionais', dica: 'Tudo o que não coube nas perguntas acima: impressões da reunião, pedidos soltos, alertas.' }]}
         respostas={projeto.briefing}
         concluido={tarefa?.status === 'feita'}
       />

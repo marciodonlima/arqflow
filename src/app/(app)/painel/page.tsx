@@ -1,101 +1,103 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Cabecalho } from '@/components/Cabecalho'
+import { Kpi } from '@/components/Kpi'
+import { SeloSaude } from '@/components/Saude'
 import { ESSENCIAIS_PLANEJAMENTO } from '@/lib/biblioteca'
-import { projetosDe, sessao, tarefasDe } from '@/lib/dados'
-import { dataCurta, hojeEm, somarDias } from '@/lib/datas'
-import { horasTotais, reais } from '@/lib/formato'
+import { estiloCor } from '@/lib/cores'
+import { apontamentosDesde, carregarCarteira, sessao } from '@/lib/dados'
+import { dataCurta, hojeEm, inicioDaSemana } from '@/lib/datas'
+import { horas, horasTotais, reais } from '@/lib/formato'
 
 export const metadata: Metadata = { title: 'Painel' }
 
 export default async function Painel() {
-  const { supabase, perfil } = await sessao()
-  const hoje = hojeEm(perfil.fuso)
-  const projetos = await projetosDe(supabase, ['andamento', 'proposta', 'pausado'])
-  const tarefas = await tarefasDe(supabase, projetos.map((p) => p.id))
+  const { supabase, perfil, hoje } = await sessao()
+  const [{ projetos, tarefas, parcelas, saudes }, apontamentos] = await Promise.all([
+    carregarCarteira(supabase, perfil, hoje),
+    apontamentosDesde(supabase, new Date(Date.now() - 9 * 86400000).toISOString()),
+  ])
   const ativos = projetos.filter((p) => p.status === 'andamento')
   const propostas = projetos.filter((p) => p.status === 'proposta')
-  const doProjeto = (id: string) => tarefas.filter((t) => t.projeto_id === id)
-  const restantes = ativos.reduce((s, p) => s + doProjeto(p.id).filter((t) => t.status !== 'feita').reduce((a, t) => a + t.horas_estimadas, 0), 0)
-  const semana = somarDias(hoje, -7)
-  const feitasSemana = tarefas.filter((t) => t.status === 'feita' && t.concluida_em && hojeEm(perfil.fuso, new Date(t.concluida_em)) > semana)
-  const atrasadas = tarefas.filter((t) => t.status !== 'feita' && t.data_prevista && t.data_prevista < hoje && ativos.some((p) => p.id === t.projeto_id))
+  const semana = inicioDaSemana(hoje)
+  const horasSemana = apontamentos.filter((a) => hojeEm(perfil.fuso, new Date(a.inicio)) >= semana).reduce((s, a) => s + (a.horas ?? 0), 0)
+  const contratado = ativos.reduce((s, p) => s + saudes[p.id].valor, 0)
+  const margemPrevista = ativos.reduce((s, p) => s + saudes[p.id].margemPrevista, 0)
+  const margemProjetada = ativos.reduce((s, p) => s + saudes[p.id].margemProjetada, 0)
+  const horasProj = ativos.reduce((s, p) => s + saudes[p.id].horasProjetadas, 0)
+  const valorHora = horasProj > 0 ? contratado / horasProj : null
+  const aReceber = parcelas.filter((x) => x.status === 'a_receber' && ativos.some((p) => p.id === x.projeto_id)).reduce((s, x) => s + x.valor, 0)
+  const atrasados = ativos.filter((p) => saudes[p.id].status === 'atrasado').length
+  const atencao = ativos.filter((p) => saudes[p.id].status === 'atencao').length
+  const restantes = ativos.reduce((s, p) => s + saudes[p.id].horasRestantes, 0)
 
   return (
     <>
-      <header className="cabecalho">
-        <div>
-          <h1 className="titulo-pagina">Painel</h1>
-          <p className="apoio">Uma visão do conjunto, para decidir com calma.</p>
-        </div>
-      </header>
+      <Cabecalho titulo="Painel" subtitulo="O conjunto dos projetos: prazo, horas e dinheiro, para decidir com calma." />
       <div className="pilha-g">
-        <div className="numeros placa">
-          <div className="numero-bloco">
-            <b>{ativos.length}<span className="meta"> / 5</span></b>
-            <span>projetos ativos</span>
-          </div>
-          <div className="numero-bloco">
-            <b>{reais(propostas.reduce((s, p) => s + (p.valor_proposta ?? 0), 0))}</b>
-            <span>{propostas.length} {propostas.length === 1 ? 'proposta em aberto' : 'propostas em aberto'}</span>
-          </div>
-          <div className="numero-bloco">
-            <b>{horasTotais(restantes)}</b>
-            <span>de trabalho contratado pela frente</span>
-          </div>
-          <div className="numero-bloco">
-            <b>{horasTotais(feitasSemana.reduce((s, t) => s + (t.horas_reais ?? t.horas_estimadas), 0))}</b>
-            <span>concluídas nos últimos 7 dias</span>
-          </div>
+        <div className="kpis kpis-4">
+          <Kpi rotulo="Projetos ativos" valor={`${ativos.length}`} detalhe={atrasados || atencao ? `${atrasados} atrasados · ${atencao} pedem atenção` : 'todos no prazo'} destaque={atrasados ? 'ruim' : undefined} />
+          <Kpi rotulo="Margem projetada" valor={reais(margemProjetada)} detalhe={`prevista ${reais(margemPrevista)}`} destaque={margemProjetada < margemPrevista - 1 ? 'ruim' : undefined} />
+          <Kpi rotulo="Você ganha por hora" valor={valorHora ? reais(valorHora) : '—'} detalhe={`custo ${reais(perfil.custo_hora)}/h · meta ${reais(perfil.custo_hora * (1 + perfil.margem / 100))}/h`} destaque={valorHora && valorHora < perfil.custo_hora ? 'ruim' : undefined} />
+          <Kpi rotulo="A receber agora" valor={reais(aReceber)} detalhe={`${propostas.length} propostas em aberto (${reais(propostas.reduce((s, p) => s + (p.valor_proposta ?? 0), 0))})`} />
         </div>
-
-        {atrasadas.length > 0 && (
-          <p className="aviso">
-            {atrasadas.length} {atrasadas.length === 1 ? 'tarefa passou' : 'tarefas passaram'} da data em projetos ativos. Em cada projeto, “Redistribuir datas” refaz o cronograma a partir de hoje.
-          </p>
-        )}
+        <div className="kpis">
+          <Kpi rotulo="Trabalho contratado pela frente" valor={horasTotais(restantes)} detalhe={`≈ ${Math.ceil(restantes / Math.max(1, perfil.horas_dia))} dias de ${horasTotais(perfil.horas_dia)}`} />
+          <Kpi rotulo="Cronometrado nesta semana" valor={horas(horasSemana)} />
+          <Kpi rotulo="Contratado em andamento" valor={reais(contratado)} />
+        </div>
 
         <section className="pilha">
           <h2 className="titulo-secao">Projetos</h2>
           <div className="tabela-rolagem">
-            <table className="tabela">
+            <table className="tabela tabela-painel">
               <thead>
                 <tr>
                   <th>Projeto</th>
-                  <th>Planejamento</th>
+                  <th>Saúde</th>
                   <th>Progresso</th>
-                  <th className="num">Horas</th>
-                  <th className="num">Valor</th>
                   <th className="num">Entrega</th>
+                  <th className="num">Ritmo</th>
+                  <th className="num">Margem prevista</th>
+                  <th className="num">Margem projetada</th>
+                  <th className="num">R$/hora</th>
+                  <th className="num">Planejamento</th>
                 </tr>
               </thead>
               <tbody>
-                {projetos.map((p) => {
-                  const t = doProjeto(p.id)
-                  const total = t.reduce((s, x) => s + x.horas_estimadas, 0)
-                  const feitas = t.filter((x) => x.status === 'feita').reduce((s, x) => s + x.horas_estimadas, 0)
+                {[...ativos, ...propostas].map((p) => {
+                  const s = saudes[p.id]
+                  const t = tarefas.filter((x) => x.projeto_id === p.id)
                   const ess = t.filter((x) => ESSENCIAIS_PLANEJAMENTO.includes(x.chave ?? ''))
-                  const essOk = ess.filter((x) => x.status === 'feita').length
-                  const pct = total ? Math.round((feitas / total) * 100) : 0
                   return (
-                    <tr key={p.id}>
-                      <td style={{ padding: '12px 8px 12px 0' }}>
-                        <Link href={`/projetos/${p.id}`}>{p.nome}</Link>
-                        <div className="meta">{p.status === 'proposta' ? 'proposta' : p.status === 'pausado' ? 'pausado' : p.cliente}</div>
+                    <tr key={p.id} className="cor-projeto" style={estiloCor(p.cor)}>
+                      <td>
+                        <Link href={`/projetos/${p.id}`} className="nome-projeto">
+                          <i className="marcador-cor" aria-hidden="true" />
+                          {p.nome}
+                        </Link>
                       </td>
-                      <td className="meta numero">{essOk}/{ess.length}</td>
-                      <td style={{ minWidth: 120 }}>
-                        <div className="progresso"><i style={{ width: `${pct}%` }} /></div>
-                        <span className="meta numero">{pct}%</span>
+                      <td><SeloSaude status={s.status} pequeno /></td>
+                      <td style={{ minWidth: 110 }}>
+                        <div className="progresso"><i style={{ width: `${Math.round(s.progresso * 100)}%` }} /></div>
+                        <span className="meta numero">{Math.round(s.progresso * 100)}%{s.progressoEsperado != null ? ` de ${Math.round(s.progressoEsperado * 100)}% previsto` : ''}</span>
                       </td>
-                      <td className="num numero">{horasTotais(total - feitas)}</td>
-                      <td className="num numero">{reais(p.valor_contrato ?? p.valor_proposta)}</td>
-                      <td className="num numero">{p.data_entrega ? dataCurta(p.data_entrega) : '—'}</td>
+                      <td className="num numero">
+                        {p.data_entrega ? dataCurta(p.data_entrega) : '—'}
+                        {s.diasAtraso > 0 && <div className="atraso-mini">+{s.diasAtraso} dias</div>}
+                      </td>
+                      <td className="num numero">{s.ritmo != null ? `${Math.round(s.ritmo * 100)}%` : '—'}</td>
+                      <td className="num numero">{s.valor ? reais(s.margemPrevista) : '—'}</td>
+                      <td className={`num numero${s.impactoMargem < -1 ? ' estouro' : ''}`}>{s.valor ? reais(s.margemProjetada) : '—'}</td>
+                      <td className="num numero">{s.valorHoraProjetado ? reais(s.valorHoraProjetado) : '—'}</td>
+                      <td className="num numero">{ess.filter((x) => x.status === 'feita').length}/{ess.length}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+          <p className="meta">Ritmo é o tempo real dividido pelo estimado nas tarefas concluídas com horas registradas. Acima de 100%, o projeto está custando mais do que o orçado.</p>
         </section>
       </div>
     </>

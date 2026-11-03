@@ -1,43 +1,36 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Icone } from '@/components/Icone'
+import { Cabecalho } from '@/components/Cabecalho'
+import { SeloSaude } from '@/components/Saude'
 import { TIPOLOGIAS } from '@/lib/biblioteca'
-import { projetoPorId, sessao } from '@/lib/dados'
+import { estiloCor } from '@/lib/cores'
+import { carregarProjeto, sessao } from '@/lib/dados'
+import { dataCurta } from '@/lib/datas'
 import { AbasProjeto } from './AbasProjeto'
 import { AcoesProjeto } from './AcoesProjeto'
 
-const STATUS: Record<string, string> = {
-  proposta: 'Em proposta',
-  andamento: 'Em andamento',
-  pausado: 'Pausado',
-  concluido: 'Concluído',
-  arquivado: 'Arquivado',
-}
-
 export default async function LayoutProjeto({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { supabase } = await sessao()
-  const projeto = await projetoPorId(supabase, id)
-  if (!projeto) notFound()
+  const { supabase, perfil, hoje } = await sessao()
+  const dados = await carregarProjeto(supabase, perfil, hoje, id)
+  if (!dados) notFound()
+  const { projeto, saude } = dados
   const tip = TIPOLOGIAS.find((t) => t.chave === projeto.tipologia)?.nome
   return (
-    <>
-      <Link href="/projetos" className="voltar">
-        <Icone nome="seta" />
-        Projetos
-      </Link>
-      <header className="cabecalho" style={{ marginBottom: 'var(--space-5)' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <h1 className="titulo-pagina">{projeto.nome}</h1>
-            <span className={projeto.status === 'andamento' ? 'chip' : 'chip chip-neutro'}>{STATUS[projeto.status]}</span>
-          </div>
-          <p className="apoio">{[projeto.cliente, tip].filter(Boolean).join(' · ')}</p>
-        </div>
-        <AcoesProjeto id={projeto.id} status={projeto.status} />
-      </header>
-      <AbasProjeto id={projeto.id} />
+    <div className="cor-projeto projeto-espaco" style={estiloCor(projeto.cor)}>
+      <Cabecalho
+        voltar={{ href: '/projetos', rotulo: 'Projetos' }}
+        antesDoTitulo={<i className="marcador-cor marcador-grande" aria-hidden="true" />}
+        titulo={projeto.nome}
+        subtitulo={
+          <span className="subtitulo-projeto">
+            <SeloSaude status={saude.status} texto={saude.manchete} />
+            <span>{[projeto.cliente, tip, projeto.data_entrega ? `entrega ${dataCurta(projeto.data_entrega)}` : null].filter(Boolean).join(' · ')}</span>
+          </span>
+        }
+        acoes={<AcoesProjeto id={projeto.id} status={projeto.status} cor={projeto.cor} />}
+      />
+      <AbasProjeto id={projeto.id} proposta={projeto.status === 'proposta'} />
       {children}
-    </>
+    </div>
   )
 }

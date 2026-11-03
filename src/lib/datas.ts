@@ -84,3 +84,63 @@ export function quando(d: string | null, hoje: string): string {
   if (n < 7) return diaDaSemana(d).toLowerCase()
   return dataCurta(d)
 }
+
+// Data de entrega a partir de um prazo em dias, contado do dia seguinte ao início
+export function entregaPorPrazo(inicio: string, dias: number, tipo: 'corridos' | 'uteis'): string {
+  if (dias <= 0) return inicio
+  if (tipo === 'corridos') return somarDias(inicio, dias)
+  let x = inicio
+  let restam = dias
+  while (restam > 0) {
+    x = somarDias(x, 1)
+    if (ehDiaUtil(x)) restam--
+  }
+  return x
+}
+
+// Dias úteis entre hoje (exclusive) e a data (inclusive); negativo quando já passou
+export function diasUteisAte(hoje: string, data: string): number {
+  if (data >= hoje) return diasUteisEntre(somarDias(hoje, 1), data)
+  return -diasUteisEntre(somarDias(data, 1), hoje)
+}
+
+export function inicioDoMes(d: string): string {
+  return d.slice(0, 8) + '01'
+}
+
+export function somarMeses(d: string, n: number): string {
+  const x = new Date(d.slice(0, 8) + '01T00:00:00Z')
+  x.setUTCMonth(x.getUTCMonth() + n)
+  return x.toISOString().slice(0, 10)
+}
+
+// Semanas (segunda a domingo) que cobrem o mês da data
+export function gradeDoMes(d: string): string[][] {
+  const primeiro = inicioDoMes(d)
+  const w = (new Date(primeiro + 'T00:00:00Z').getUTCDay() + 6) % 7
+  let x = somarDias(primeiro, -w)
+  const mes = primeiro.slice(0, 7)
+  const semanas: string[][] = []
+  do {
+    const s: string[] = []
+    for (let i = 0; i < 7; i++) {
+      s.push(x)
+      x = somarDias(x, 1)
+    }
+    semanas.push(s)
+  } while (x.slice(0, 7) === mes)
+  return semanas
+}
+
+export function inicioDaSemana(d: string): string {
+  const w = (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7
+  return somarDias(d, -w)
+}
+
+export const nomeMes = (d: string) => {
+  const m = mesLongo(d)
+  return `${m[0].toUpperCase()}${m.slice(1)} de ${d.slice(0, 4)}`
+}
+
+// Próximo dia útil depois de d (amanhã, pulando fim de semana)
+export const diaUtilSeguinte = (d: string) => proximoDiaUtil(somarDias(d, 1))

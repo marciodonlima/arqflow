@@ -2,42 +2,42 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { salvarAparencia } from '@/acoes/dia'
-import { ESTILOS, FONTE_URL } from '@/lib/aparencia'
-import type { Esquema, Estilo } from '@/lib/tipos'
+import { ESTILOS, FONTE_URL, esquemaPorHora } from '@/lib/aparencia'
+import type { Estilo, PreferenciaEsquema } from '@/lib/tipos'
 import { Icone } from './Icone'
 
-export function Aparencia({ estilo: e0, esquema: s0, comTitulo = true }: { estilo: Estilo; esquema: Esquema; comTitulo?: boolean }) {
+export function Aparencia({ estilo: e0, esquema: s0 }: { estilo: Estilo; esquema: PreferenciaEsquema }) {
   const [estilo, setEstilo] = useState(e0)
-  const [esquema, setEsquema] = useState(s0)
+  const [pref, setPref] = useState<PreferenciaEsquema>(s0)
   const [, iniciar] = useTransition()
 
-  function aplicar(e: Estilo, s: Esquema) {
+  function aplicar(e: Estilo, s: PreferenciaEsquema, salvar = true) {
     setEstilo(e)
-    setEsquema(s)
+    setPref(s)
     const raiz = document.documentElement
     raiz.dataset.estilo = e
-    raiz.dataset.theme = s
+    raiz.dataset.pref = s
+    raiz.dataset.theme = s === 'auto' ? esquemaPorHora(new Date().getHours()) : s
     const link = document.getElementById('af-fonte') as HTMLLinkElement | null
     if (link && link.href !== FONTE_URL[e]) link.href = FONTE_URL[e]
-    iniciar(() => salvarAparencia(e, s))
+    if (salvar) iniciar(() => salvarAparencia(e, s))
   }
 
-  // O perfil manda: num aparelho novo, aplica o estilo salvo na conta
+  // O perfil manda: num aparelho novo, aplica o que está salvo na conta
   useEffect(() => {
     const raiz = document.documentElement
-    if (raiz.dataset.estilo !== e0 || raiz.dataset.theme !== s0) aplicar(e0, s0)
+    if (raiz.dataset.estilo !== e0 || raiz.dataset.pref !== s0) aplicar(e0, s0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const nome = ESTILOS.find((x) => x.chave === estilo)?.nome
+  const nomeEsquema = pref === 'auto' ? 'automático' : pref
   return (
     <div className="pilha" style={{ gap: 10 }}>
-      {comTitulo && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span className="rotulo">Aparência</span>
-          <span className="meta">{nome}, {esquema}</span>
-        </div>
-      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span className="rotulo">Estilo</span>
+        <span className="meta">{nome}, {nomeEsquema}</span>
+      </div>
       <div className="amostras" role="group" aria-label="Estilo">
         {ESTILOS.map((x) => (
           <button
@@ -47,20 +47,24 @@ export function Aparencia({ estilo: e0, esquema: s0, comTitulo = true }: { estil
             aria-label={`Estilo ${x.nome}`}
             aria-pressed={estilo === x.chave}
             title={x.nome}
-            onClick={() => aplicar(x.chave, esquema)}
+            onClick={() => aplicar(x.chave, pref)}
           >
             <span className="af-swatch-fill" />
           </button>
         ))}
       </div>
-      <div className="esquemas" role="group" aria-label="Claro ou escuro">
-        <button type="button" aria-pressed={esquema === 'claro'} onClick={() => aplicar(estilo, 'claro')}>
+      <div className="esquemas tres" role="group" aria-label="Claro, escuro ou automático">
+        <button type="button" aria-pressed={pref === 'claro'} onClick={() => aplicar(estilo, 'claro')}>
           <Icone nome="claro" />
           <span>Claro</span>
         </button>
-        <button type="button" aria-pressed={esquema === 'escuro'} onClick={() => aplicar(estilo, 'escuro')}>
+        <button type="button" aria-pressed={pref === 'escuro'} onClick={() => aplicar(estilo, 'escuro')}>
           <Icone nome="escuro" />
           <span>Escuro</span>
+        </button>
+        <button type="button" aria-pressed={pref === 'auto'} onClick={() => aplicar(estilo, 'auto')} title="Claro das 6h às 18h, escuro depois">
+          <Icone nome="relogio" />
+          <span>Auto</span>
         </button>
       </div>
     </div>

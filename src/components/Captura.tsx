@@ -92,18 +92,13 @@ export function CapturaProvider({ projetos, children }: { projetos: { id: string
   )
 }
 
-export function BotaoCapturar({ largo = false }: { largo?: boolean }) {
+export function BotaoCapturar() {
   const { abrir } = useContext(Contexto)
-  if (largo)
-    return (
-      <button type="button" className="capturar-largo" onClick={abrir}>
-        <Icone nome="mais" />
-        <span>Capturar</span>
-      </button>
-    )
   return (
-    <button type="button" className="capturar" onClick={abrir} aria-label="Capturar">
+    <button type="button" className="btn-topo" onClick={abrir} title="Capturar uma ideia ou pendência (tecla C)">
       <Icone nome="mais" />
+      <span className="btn-topo-texto">Capturar</span>
+      <kbd className="tecla">C</kbd>
     </button>
   )
 }

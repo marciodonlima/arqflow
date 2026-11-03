@@ -3,19 +3,24 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-export function AbasProjeto({ id }: { id: string }) {
+export function AbasProjeto({ id, proposta }: { id: string; proposta: boolean }) {
   const p = usePathname()
   const base = `/projetos/${id}`
-  const aba = (href: string, nome: string) => (
-    <Link href={href} aria-current={p === href ? 'page' : undefined}>
-      {nome}
-    </Link>
-  )
+  const abas = [
+    { href: base, nome: 'Visão geral' },
+    { href: `${base}/tarefas`, nome: 'Tarefas' },
+    { href: `${base}/briefing`, nome: 'Briefing' },
+    { href: `${base}/programa`, nome: 'Programa' },
+    { href: `${base}/proposta`, nome: proposta ? 'Proposta e contrato' : 'Proposta' },
+    { href: `${base}/financeiro`, nome: 'Financeiro' },
+  ]
   return (
     <nav className="abas" aria-label="Seções do projeto">
-      {aba(base, 'Fluxo')}
-      {aba(`${base}/briefing`, 'Briefing')}
-      {aba(`${base}/programa`, 'Programa e setorização')}
+      {abas.map((a) => (
+        <Link key={a.href} href={a.href} aria-current={p === a.href ? 'page' : undefined}>
+          {a.nome}
+        </Link>
+      ))}
     </nav>
   )
 }

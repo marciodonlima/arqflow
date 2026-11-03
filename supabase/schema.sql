@@ -199,3 +199,108 @@ drop trigger if exists projetos_atualizado on public.projetos;
 create trigger projetos_atualizado
   before update on public.projetos
   for each row execute function public.tocar_atualizado();
+
+-- ===============================================================
+-- v0.2 · estrutura e produtividade
+-- ===============================================================
+
+alter table public.perfis add column if not exists custos jsonb not null default '{}';
+alter table public.perfis add column if not exists horas_produtivas_mes numeric(6, 1);
+alter table public.perfis add column if not exists impostos numeric(5, 2) not null default 0;
+alter table public.perfis add column if not exists uf text not null default 'RJ';
+alter table public.perfis add column if not exists cidade text not null default 'Rio de Janeiro';
+alter table public.perfis add column if not exists onboarding_ok boolean not null default false;
+
+alter table public.projetos add column if not exists cor text;
+alter table public.projetos add column if not exists prazo_dias integer;
+alter table public.projetos add column if not exists prazo_tipo text not null default 'corridos';
+alter table public.projetos add column if not exists detalhes jsonb not null default '{}';
+
+alter table public.tarefas add column if not exists checklist jsonb not null default '[]';
+alter table public.tarefas add column if not exists timer_inicio timestamptz;
+
+-- Horas reais: cada vez que o cronômetro roda vira um apontamento
+create table if not exists public.apontamentos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tarefa_id uuid not null references public.tarefas (id) on delete cascade,
+  projeto_id uuid not null references public.projetos (id) on delete cascade,
+  inicio timestamptz not null default now(),
+  fim timestamptz,
+  horas numeric(6, 2),
+  nota text not null default '',
+  criado_em timestamptz not null default now()
+);
+create index if not exists apontamentos_user_idx on public.apontamentos (user_id, inicio);
+create index if not exists apontamentos_projeto_idx on public.apontamentos (projeto_id);
+
+-- Parcelas do contrato, ligadas às fases
+create table if not exists public.parcelas (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  projeto_id uuid not null references public.projetos (id) on delete cascade,
+  descricao text not null default '',
+  valor numeric(12, 2) not null default 0,
+  fase text,
+  vencimento date,
+  status text not null default 'prevista' check (status in ('prevista', 'a_receber', 'recebida')),
+  recebida_em date,
+  ordem integer not null default 0,
+  criado_em timestamptz not null default now()
+);
+create index if not exists parcelas_projeto_idx on public.parcelas (projeto_id, ordem);
+
+-- Propostas, contratos e outros documentos do projeto
+create table if not exists public.documentos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  projeto_id uuid not null references public.projetos (id) on delete cascade,
+  tipo text not null default 'outro' check (tipo in ('proposta', 'contrato', 'outro')),
+  titulo text not null default '',
+  conteudo text not null default '',
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create index if not exists documentos_projeto_idx on public.documentos (projeto_id, tipo);
+
+-- Conversas com o assistente
+create table if not exists public.mensagens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  projeto_id uuid references public.projetos (id) on delete cascade,
+  papel text not null check (papel in ('user', 'assistant')),
+  conteudo text not null,
+  criado_em timestamptz not null default now()
+);
+create index if not exists mensagens_user_idx on public.mensagens (user_id, projeto_id, criado_em);
+
+alter table public.apontamentos enable row level security;
+alter table public.parcelas enable row level security;
+alter table public.documentos enable row level security;
+alter table public.mensagens enable row level security;
+
+drop policy if exists "apontamentos proprios" on public.apontamentos;
+create policy "apontamentos proprios" on public.apontamentos
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "parcelas proprias" on public.parcelas;
+create policy "parcelas proprias" on public.parcelas
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "documentos proprios" on public.documentos;
+create policy "documentos proprios" on public.documentos
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists "mensagens proprias" on public.mensagens;
+create policy "mensagens proprias" on public.mensagens
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+grant select, insert, update, delete on public.apontamentos, public.parcelas, public.documentos, public.mensagens to authenticated;
